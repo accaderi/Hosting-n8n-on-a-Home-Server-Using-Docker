@@ -188,10 +188,98 @@ Install Certbot and the necessary Nginx plugin:
 ```bash
 sudo apt install certbot python3-certbot-nginx
 ```
-12. Obtain an SSL Certificate
+## 12. Obtain an SSL Certificate
 To obtain an SSL certificate for your domain:
 
 ```bash
 sudo certbot --nginx -d your-domain.com
 ```
 To check the certificate, you can use [SSL Labs](https://www.ssllabs.com/)
+
+# Reset and Update n8n on your server
+
+## 🔑 Reset Your n8n Password
+
+If you’ve forgotten your n8n password on a Google Cloud VM with Docker, you can reset it without losing workflows or data.
+
+### 1. Identify Your n8n Container
+SSH into your Google Cloud VM and list running containers:
+```bash
+docker exec -u node -it <your_n8n_container_name> n8n user-management:reset
+```
+
+✅ Expected message:
+
+Successfully reset the database to default user state.
+
+### 3. Restart the Container
+
+```bash
+docker restart <your_n8n_container_name>
+```
+
+Next time you open n8n in the browser, you’ll be prompted to **set up a new admin user**.
+
+---
+
+## ⬆️ Updating n8n Docker Instance
+
+### 1. Backup Your Data
+Always back up the `.n8n` data directory.
+
+```bash
+cp -r ~/.n8n ~/n8n_backup_$(date +%Y%m%d_%H%M%S)
+```
+
+To restore from a backup:
+
+```bash
+rm -rf ~/.n8n
+cp -r ~/n8n_backup_YYYYMMDD_HHMMSS ~/.n8n
+```
+
+### 2. Stop the Current Container
+Find your container name:
+
+```bash
+docker ps
+```
+
+Stop it:
+
+```bash
+docker stop <container_name_or_id>
+```
+
+### 3. Remove the Old Container
+
+```bash
+docker rm <container_name_or_id>
+```
+
+### 4. Pull the Latest n8n Image
+Check the latest version on [n8n Docker docs](https://docs.n8n.io/hosting/installation/docker/).  
+For example, to pull version **1.98.2**:
+
+```bash
+sudo docker pull docker.n8n.io/n8nio/n8n:1.98.2
+```
+
+### 5. Run the New Container
+Start n8n (replace `your-domain.com` and adjust params as needed):
+
+```bash
+sudo docker run -d --restart unless-stopped -it
+--name n8n
+-p 5678:5678
+-e N8N_HOST="your-domain.com"
+-e WEBHOOK_TUNNEL_URL="https://your-domain.com/"
+-e WEBHOOK_URL="https://your-domain.com/"
+-v ~/.n8n:/root/.n8n
+n8nio/n8n:1.98.2
+```
+
+## ✅ Summary
+- **Reset password** → `docker exec -u node -it <container> n8n user-management:reset`  
+- **Backup before update** → copy `~/.n8n`  
+- **Update** → stop/remove old container, pull new image, run with mounted volume
