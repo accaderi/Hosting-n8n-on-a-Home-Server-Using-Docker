@@ -283,3 +283,60 @@ n8nio/n8n:1.98.2
 - **Reset password** → `docker exec -u node -it <container> n8n user-management:reset`  
 - **Backup before update** → copy `~/.n8n`  
 - **Update** → stop/remove old container, pull new image, run with mounted volume
+---
+
+## 🔧 FIX: hook.js:608 [WebSocketClient] Connection lost, code=1008
+Recent n8n versions and certain proxies/tunnels (Cloudflare, etc.) have triggered 1008 until Host/Origin are explicitly set and WS path/headers are correct.
+
+1. Stop and remove the current container:
+```bash
+sudo docker stop n8n; sudo docker rm n8n
+```
+
+2. Recreate with the real public host and proxy trust:
+```bash
+sudo docker run -d --restart unless-stopped -it
+--name n8n
+-p 5678:5678
+-e N8N_HOST="your-domain.com"
+-e N8N_PROTOCOL="https"
+-e WEBHOOK_URL="https://your-domain.com/"
+-e N8N_EXPRESS_TRUST_PROXY="true"
+-v ~/.n8n:/root/.n8n
+n8nio/n8n:1.98.2
+```
+
+Note: If actively using n8n’s own tunnel feature, set WEBHOOK_TUNNEL_URL to the exact public URL of that tunnel, not a placeholder; otherwise omit it.
+
+3. Nginx adjustments to stop 1008
+Place this inside the server { server_name n8n.accaderi.fyi; } block:
+```bash
+location /rest/push {
+	proxy_pass http://localhost:5678;
+	proxy_http_version 1.1;
+	proxy_set_header Upgrade $http_upgrade;
+	proxy_set_header Connection "upgrade";
+	proxy_set_header Host your-domain.com;
+	proxy_set_header Origin https://your-domain.com;
+	proxy_buffering off; proxy_cache off; chunked_transfer_encoding off;
+  }
+
+location / {
+	proxy_pass http://localhost:5678;
+	proxy_http_version 1.1;
+	proxy_set_header Upgrade $http_upgrade;
+	proxy_set_header Connection "upgrade";
+	proxy_set_header Host your-domain.com;
+	proxy_set_header Origin https://your-domain.com;
+	proxy_set_header X-Real-IP $remote_addr;
+	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+	proxy_set_header X-Forwarded-Proto $scheme;
+	proxy_buffering off; proxy_cache off; chunked_transfer_encoding off;
+  }
+```
+
+4. Reload Nginx
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+After these changes, the Editor should load new workflows without “Connection lost” loops and webhooks will show the correct https URLs.
